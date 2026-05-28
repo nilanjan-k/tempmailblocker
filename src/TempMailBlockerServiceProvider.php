@@ -57,6 +57,11 @@ class TempMailBlockerServiceProvider extends ServiceProvider
             __DIR__ . '/../resources/domains.json' => storage_path('tempmailblocker/domains.json'),
         ], 'tempmailblocker-domains');
 
+        // NOTE: The 'ClassName@method' string form is intentional. PHP 8.x
+        // refuses to call a non-static method via the array-callable form
+        // [ClassName::class, 'method'], causing extensions to always return
+        // null (falsy). Laravel's class-based extension string resolves the
+        // class through the container and invokes it as an instance call.
         $this->app['validator']->extend(
             'indisposable',
             IndisposableValidator::class . '@validate'

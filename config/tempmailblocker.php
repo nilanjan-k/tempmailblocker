@@ -9,10 +9,23 @@ return [
     | Storage Driver
     |--------------------------------------------------------------------------
     |
-    | Controls how the blocked-domain list is stored between requests.
-    | "file"  — reads the JSON file on every cold start (zero cache deps).
-    | "cache" — stores the list in your configured Laravel cache store, keyed
-    |           by `cache_key` and expired after `cache_ttl` minutes.
+    | Controls how the blocked-domain list is loaded into memory.
+    |
+    | "file"    — Reads and JSON-decodes the domains file on each PHP-FPM worker
+    |             cold start. Simple, zero infrastructure dependencies.
+    |
+    | "cache"   — Stores the list in your configured Laravel cache store (Redis,
+    |             Memcached, etc.), shared across all workers. Best for
+    |             horizontally-scaled fleets where you want one warm-up per
+    |             cache server rather than per worker process.
+    |
+    | "opcache" — Writes a PHP file that returns the domain hash map as a
+    |             literal array. OPcache compiles it to bytecode on the first
+    |             include and serves it from shared memory on every subsequent
+    |             request — no JSON parsing, no file I/O after the first hit.
+    |             Fastest option for PHP-FPM + OPcache environments.
+    |             Requires running `php artisan tempmailblocker:update` to
+    |             generate the PHP file at `opcache_path`.
     |
     */
     'storage' => 'file',
@@ -51,6 +64,21 @@ return [
     |
     */
     'domains_path' => storage_path('tempmailblocker/domains.json'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | OPcache PHP File Path
+    |--------------------------------------------------------------------------
+    |
+    | Path to the auto-generated PHP file used by the "opcache" storage driver.
+    | This file is created automatically by `php artisan tempmailblocker:update`
+    | when storage is set to "opcache". It exports the domain list as a PHP
+    | hash map so OPcache can compile and serve it from shared memory.
+    |
+    | Only relevant when `storage` is set to "opcache".
+    |
+    */
+    'opcache_path' => storage_path('tempmailblocker/domains.php'),
 
     /*
     |--------------------------------------------------------------------------

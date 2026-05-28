@@ -52,14 +52,29 @@ This creates `config/tempmailblocker.php`. Every key is documented below.
 
 | Key | Default | Description |
 |---|---|---|
-| `storage` | `"file"` | Storage driver. `"file"` reads the JSON file on each cold start. `"cache"` stores the list in Laravel's cache. |
+| `storage` | `"file"` | Storage driver: `"file"` reads and JSON-decodes the domain file on each cold start; `"cache"` shares the list via Laravel's cache store (Redis/Memcached); `"opcache"` loads a pre-built PHP hash-map from OPcache shared memory — fastest option for PHP-FPM deployments. |
 | `cache_key` | `"tempmailblocker_domains"` | Cache key used when `storage` is `"cache"`. |
 | `cache_ttl` | `1440` | Cache lifetime in **minutes** (default: 24 hours). Only used when `storage` is `"cache"`. |
-| `domains_path` | `storage_path('tempmailblocker/domains.json')` | Absolute path to the JSON domain list on disk. |
-| `source_url` | *(disposable-email-domains GitHub raw URL)* | Remote source from which `tempmailblocker:update` fetches the latest list. |
+| `domains_path` | `storage_path('tempmailblocker/domains.json')` | Absolute path to the JSON domain list on disk. Written by `tempmailblocker:update`; falls back to the bundled seed list if absent. |
+| `opcache_path` | `storage_path('tempmailblocker/domains.php')` | Path to the auto-generated PHP hash-map file used by the `"opcache"` driver. Created automatically by `tempmailblocker:update` when `storage` is `"opcache"`. |
+| `source_url` | *(disposable-email-domains GitHub raw URL)* | Remote source from which `tempmailblocker:update` fetches the latest list. Must be an HTTPS URL. |
 | `message` | `"Disposable or temporary email addresses are not allowed."` | Default validation error message. |
-| `whitelist` | `[]` | Array of domains that are **always allowed**, even if they appear in the blocked list. |
-| `blacklist` | `[]` | Array of domains that are **always blocked**, even if they do not appear in the blocked list. |
+| `whitelist` | `[]` | Array of domains that are **always allowed**, even if they appear in the blocked list. Subdomains are also covered (whitelisting `example.com` also allows `sub.example.com`). |
+| `blacklist` | `[]` | Array of domains that are **always blocked**, even if they do not appear in the blocked list. Subdomains are also covered. |
+
+### Choosing a storage driver
+
+| Driver | Best for | How it works |
+|---|---|---|
+| `"file"` | Octane / Swoole, single-server setups | Reads `domains_path` once per worker process; the singleton holds it in memory for the worker's lifetime. |
+| `"cache"` | Horizontally-scaled fleets | Stores the domain list in Laravel's configured cache store (Redis, Memcached). One warm-up per cache server instead of per worker. |
+| `"opcache"` | PHP-FPM + OPcache deployments | `tempmailblocker:update` writes a PHP file containing the hash map as a literal `return` statement. OPcache compiles it to bytecode on the first request and serves it from shared memory on every subsequent one — no JSON parsing, no disk I/O after the initial compile. |
+
+To use the `opcache` driver:
+
+1. Set `'storage' => 'opcache'` in `config/tempmailblocker.php`.
+2. Run `php artisan tempmailblocker:update` — this writes both `domains.json` and `domains.php`.
+3. Schedule daily updates so the PHP file stays fresh (see [Scheduling automatic updates](#scheduling-automatic-updates)).
 
 ---
 
